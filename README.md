@@ -194,11 +194,11 @@ Open a Pull Request
 📝 License
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-📞 Support
+📞 
 For support and questions:
 
 Create an issue in this repository
-Email: your-email@example.com
+Email: ayush.kore03@gmail.com
 🙏 Acknowledgments
 Spring Boot for the backend framework
 Angular for the frontend framework
