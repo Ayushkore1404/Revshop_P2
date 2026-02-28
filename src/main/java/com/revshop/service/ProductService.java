@@ -1,0 +1,225 @@
+package com.revshop.service;
+
+import com.revshop.dto.ProductDTO;
+import com.revshop.model.Product;
+import com.revshop.model.User;
+import com.revshop.repository.ProductRepository;
+import com.revshop.repository.UserRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@Service
+@Transactional
+public class ProductService {
+
+    private final ProductRepository productRepository;
+    private final UserRepository userRepository;
+
+    public ProductService(ProductRepository productRepository, UserRepository userRepository) {
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+    }
+
+    /**
+     * Convert Product entity to ProductDTO
+     * Safe serialization without lazy loading issues
+     */
+    private ProductDTO convertToDTO(Product product) {
+        ProductDTO dto = new ProductDTO();
+        dto.setId(product.getId());
+        dto.setName(product.getName());
+        dto.setDescription(product.getDescription());
+        dto.setPrice(product.getPrice());
+        dto.setStock(product.getStock());
+        dto.setCategory(product.getCategory());
+        dto.setImageUrl(product.getImageUrl());
+        dto.setLowStockThreshold(product.getLowStockThreshold());
+        
+        // Safe seller information extraction
+        if (product.getSeller() != null) {
+            dto.setSellerId(product.getSeller().getId());
+            dto.setSellerName(product.getSeller().getName());
+        }
+        
+        return dto;
+    }
+
+    /**
+     * Get all products as DTOs
+     * Safe for frontend consumption
+     */
+    public List<ProductDTO> getAllProducts() {
+        try {
+            List<Product> products = productRepository.findAll();
+            return products.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("❌ Error in getAllProducts: " + e.getMessage());
+            e.printStackTrace();
+            return List.of(); // Return empty list on error
+        }
+    }
+
+    /**
+     * Get products by seller ID using CORRECT JPA relationship
+     * This is the permanent fix for the seller product fetching issue
+     */
+    public List<ProductDTO> getProductsBySeller(Long sellerId) {
+        try {
+            // Validate seller exists
+            if (!userRepository.existsById(sellerId)) {
+                System.err.println("❌ Seller not found with ID: " + sellerId);
+                return List.of();
+            }
+            
+            // Use CORRECT JPQL query that navigates the relationship properly
+            List<Product> products = productRepository.findBySellerId(sellerId);
+            
+            return products.stream()
+                    .map(this::convertToDTO)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("❌ Error in getProductsBySeller: " + e.getMessage());
+            e.printStackTrace();
+            return List.of(); // Return empty list on error
+        }
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated Use getAllProducts() instead
+     */
+    @Deprecated
+    public List<Product> getAllProductsLegacy() {
+        return productRepository.findAll();
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated Use getProductsBySeller(Long) instead
+     */
+    @Deprecated
+    public List<Product> getProductsBySellerLegacy(Long sellerId) {
+        return productRepository.findBySellerId(sellerId);
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     * @deprecated Use addProduct(ProductDTO) instead
+     */
+    @Deprecated
+    public Product addProduct(Product product) {
+        return productRepository.save(product);
+    }
+
+    /**
+     * Get product by ID as DTO
+     */
+    public Optional<ProductDTO> getProductById(Long productId) {
+        try {
+            Optional<Product> product = productRepository.findById(productId);
+            return product.map(this::convertToDTO);
+        } catch (Exception e) {
+            System.err.println("❌ Error in getProductById: " + e.getMessage());
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Add new product with DTO
+     */
+    public ProductDTO addProductDTO(ProductDTO productDTO) {
+        try {
+            Product product = new Product();
+            product.setName(productDTO.getName());
+            product.setDescription(productDTO.getDescription());
+            product.setPrice(productDTO.getPrice());
+            product.setStock(productDTO.getStock());
+            product.setCategory(productDTO.getCategory());
+            product.setImageUrl(productDTO.getImageUrl());
+            product.setLowStockThreshold(productDTO.getLowStockThreshold());
+            
+            // Set seller if provided
+            if (productDTO.getSellerId() != null) {
+                User seller = userRepository.findById(productDTO.getSellerId()).orElse(null);
+                product.setSeller(seller);
+            }
+            
+            Product savedProduct = productRepository.save(product);
+            return convertToDTO(savedProduct);
+        } catch (Exception e) {
+            System.err.println("❌ Error in addProductDTO: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to add product: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Update existing product
+     */
+    public ProductDTO updateProduct(Long productId, ProductDTO productDTO) {
+        try {
+            Product existingProduct = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found with ID: " + productId));
+            
+            existingProduct.setName(productDTO.getName());
+            existingProduct.setDescription(productDTO.getDescription());
+            existingProduct.setPrice(productDTO.getPrice());
+            existingProduct.setStock(productDTO.getStock());
+            existingProduct.setCategory(productDTO.getCategory());
+            existingProduct.setImageUrl(productDTO.getImageUrl());
+            existingProduct.setLowStockThreshold(productDTO.getLowStockThreshold());
+            
+            Product updatedProduct = productRepository.save(existingProduct);
+            return convertToDTO(updatedProduct);
+        } catch (Exception e) {
+            System.err.println("❌ Error in updateProduct: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to update product: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Delete product
+     */
+    public void deleteProduct(Long productId) {
+        try {
+            if (!productRepository.existsById(productId)) {
+                throw new RuntimeException("Product not found with ID: " + productId);
+            }
+            productRepository.deleteById(productId);
+        } catch (Exception e) {
+            System.err.println("❌ Error in deleteProduct: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to delete product: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Update product image URL
+     */
+    public void updateProductImage(Long productId, String imageUrl) {
+        try {
+            Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new RuntimeException("Product not found with ID: " + productId));
+            
+            product.setImageUrl(imageUrl);
+            productRepository.save(product);
+            
+            System.out.println("✅ Updated image for product " + productId + ": " + imageUrl);
+        } catch (Exception e) {
+            System.err.println("❌ Error in updateProductImage: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Failed to update product image: " + e.getMessage());
+        }
+    }
+
+    // Add other methods as needed...
+}
